@@ -1,0 +1,6 @@
+@Stream.Backend_HostAddress = http://localhost:5068
+
+GET {{Stream.Backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
