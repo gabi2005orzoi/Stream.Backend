@@ -1,0 +1,10 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/publish_linux
+**/publish_win
+**/publish
+**/*.user
+Stream.Api/appsettings.Development.json
