@@ -1,4 +1,4 @@
-﻿using Stream.Application.DTOs;
+using Stream.Application.DTOs;
 using Stream.Application.Interfaces;
 using System;
 using System.Collections.Generic;
@@ -10,25 +10,28 @@ namespace Stream.Infrastructure.Providers
     public class JamendoProvider : IMusicProvider
     {
         private readonly HttpClient httpClient;
-        private const string ClientId = "56d30c41";
+        private readonly string? clientId;
 
-        public JamendoProvider(HttpClient httpClient)
+        public JamendoProvider(HttpClient httpClient, Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
             this.httpClient = httpClient;
+            this.clientId = configuration["Jamendo:ClientId"] 
+                ?? configuration["JAMENDO_CLIENT_ID"] 
+                ?? Environment.GetEnvironmentVariable("JAMENDO_CLIENT_ID");
         }
 
         public string Name => "Jamendo";
 
         public async Task<IReadOnlyList<TrackCandidate>> SearchAsync(string query, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(query))
+            if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(clientId))
                 return [];
 
             var results = new List<TrackCandidate>();
 
             try
             {
-                var url = $"https://api.jamendo.com/v3.0/tracks/?client_id={ClientId}&format=json&limit=10&namesearch={Uri.EscapeDataString(query)}&include=musicinfo";
+                var url = $"https://api.jamendo.com/v3.0/tracks/?client_id={clientId}&format=json&limit=10&namesearch={Uri.EscapeDataString(query)}&include=musicinfo";
                 var response = await httpClient.GetAsync(url, cancellationToken);
 
                 if (!response.IsSuccessStatusCode)

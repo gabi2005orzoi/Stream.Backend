@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Stream.Application.DTOs;
 using Stream.Application.Interfaces;
@@ -11,12 +11,18 @@ namespace Stream.Api.Controllers
     {
         private readonly IMusicProviderManager providerManager;
         private readonly ITrackRepository trackRepository;
+        private readonly IProviderTrackRepository providerTrackRepository;
         private readonly IMemoryCache cache;
 
-        public StreamController(IMusicProviderManager providerManager, ITrackRepository trackRepository, IMemoryCache cache)
+        public StreamController(
+            IMusicProviderManager providerManager, 
+            ITrackRepository trackRepository, 
+            IProviderTrackRepository providerTrackRepository,
+            IMemoryCache cache)
         {
             this.providerManager = providerManager;
             this.trackRepository = trackRepository;
+            this.providerTrackRepository = providerTrackRepository;
             this.cache = cache;
         }
 
@@ -28,10 +34,19 @@ namespace Stream.Api.Controllers
         {
             var source = await providerManager.GetPlaybackSourceAsync(externalId, provider, cancellationToken);
 
-            if (source == null)
-                return NotFound(new { message = "Audio stream couldn't be extracted for this track" });
+            if (source != null)
+                return Ok(source);
 
-            return Ok(source);
+            // Fallback: If provider failed (e.g. YouTube blocked on Render), find track in DB and fallback to other providers
+            var pt = await providerTrackRepository.FindByProviderAndExternalIdAsync(provider ?? "Youtube", externalId, cancellationToken);
+            if (pt?.Track != null)
+            {
+                var fallbackSource = await providerManager.GetPlaybackSourceForTrackAsync(pt.Track, cancellationToken);
+                if (fallbackSource != null)
+                    return Ok(fallbackSource);
+            }
+
+            return NotFound(new { message = "Audio stream couldn't be extracted for this track across all providers" });
         }
 
         [HttpGet("track/{trackId:guid}")]
@@ -49,17 +64,12 @@ namespace Stream.Api.Controllers
             if (track == null)
                 return NotFound(new { message = "Track not found in db" });
 
-            var providerTrack = track.ProviderTracks.FirstOrDefault();
-
-            if (providerTrack == null)
-                return NotFound(new { message = "Track with no associated provider" });
-
-            var source = await providerManager.GetPlaybackSourceAsync(providerTrack.ExternalId, providerTrack.Provider,  cancellationToken);
+            var source = await providerManager.GetPlaybackSourceForTrackAsync(track, cancellationToken);
 
             if (source == null)
-                return NotFound(new { message = "Couldn't extract audio stream" });
+                return NotFound(new { message = "Couldn't extract audio stream across all providers" });
 
-            cache.Set(cacheKey, source, TimeSpan.FromHours  (3));
+            cache.Set(cacheKey, source, TimeSpan.FromHours(3));
 
             return Ok(source);
         }
@@ -70,12 +80,21 @@ namespace Stream.Api.Controllers
             [FromQuery] string? provider = null,
             CancellationToken cancellationToken = default)
         {
-            var audio = await providerManager.GetAudioStreamAsync(externalId, provider ,cancellationToken);
+            var audio = await providerManager.GetAudioStreamAsync(externalId, provider, cancellationToken);
 
-            if(audio == null)
-                return NotFound(new {message = "Couldn't stream audio for this track"});
+            if (audio != null)
+                return File(audio.Stream, audio.MimeType, enableRangeProcessing: false);
 
-               return File(audio.Stream, audio.MimeType, enableRangeProcessing: false);
+            // Fallback: If direct stream failed, try other providers for this track
+            var pt = await providerTrackRepository.FindByProviderAndExternalIdAsync(provider ?? "Youtube", externalId, cancellationToken);
+            if (pt?.Track != null)
+            {
+                var fallbackAudio = await providerManager.GetAudioStreamForTrackAsync(pt.Track, cancellationToken);
+                if (fallbackAudio != null)
+                    return File(fallbackAudio.Stream, fallbackAudio.MimeType, enableRangeProcessing: true);
+            }
+
+            return NotFound(new { message = "Couldn't stream audio for this track across all providers" });
         }
 
         [HttpGet("track/{trackId:guid}/play")]
@@ -88,12 +107,10 @@ namespace Stream.Api.Controllers
             if (track == null)
                 return NotFound(new { message = "Track not found" });
 
-            foreach(var pt in track.ProviderTracks)
-            {
-                var audio = await providerManager.GetAudioStreamAsync(pt.ExternalId, pt.Provider, cancellationToken);
-                if (audio != null)
-                    return File(audio.Stream, audio.MimeType, enableRangeProcessing: true);
-            }
+            var audio = await providerManager.GetAudioStreamForTrackAsync(track, cancellationToken);
+
+            if (audio != null)
+                return File(audio.Stream, audio.MimeType, enableRangeProcessing: true);
 
             return NotFound(new { message = "Audio stream unavailable across all providers" });
         }

@@ -90,8 +90,9 @@ namespace Stream.Infrastructure.Providers
                     }
                 };
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"[YoutubeProvider] Error getting playback source for {externalId}: {ex.Message}");
                 return null;
             }
         }
