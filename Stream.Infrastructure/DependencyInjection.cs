@@ -64,6 +64,24 @@ namespace Stream.Infrastructure
                 httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
                 return new YoutubeClient(httpClient);
             });
+            // Invidious Provider (Alternative YouTube scraper/API via decentralized instances)
+            services.AddHttpClient<InvidiousProvider>(client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+                client.Timeout = TimeSpan.FromSeconds(10);
+            });
+            services.AddScoped<InvidiousProvider>();
+            services.AddScoped<IMusicProvider>(sp => sp.GetRequiredService<InvidiousProvider>());
+
+            // Cobalt Provider (Audio/Video extraction service)
+            services.AddHttpClient<CobaltProvider>(client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+                client.Timeout = TimeSpan.FromSeconds(10);
+            });
+            services.AddScoped<CobaltProvider>();
+            services.AddScoped<IMusicProvider>(sp => sp.GetRequiredService<CobaltProvider>());
+
             services.AddScoped<IMusicProvider, YoutubeProvider>();
 
             // Audius Provider (Free, open music streaming API, ideal fallback for cloud hosting)
