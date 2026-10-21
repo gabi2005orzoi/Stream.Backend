@@ -37,10 +37,22 @@ namespace Stream.Infrastructure.Repositories
             return await db.ProviderTracks
                 .Include(pt => pt.Track)
                     .ThenInclude(t => t.Artist)
+                .Include(pt => pt.Track)
+                    .ThenInclude(t => t.ProviderTracks)
                 .FirstOrDefaultAsync(pt =>
-                    pt.Provider == provider &&
+                    pt.Provider.ToLower() == provider.ToLower() &&
                     pt.ExternalId == externalId,
                     cancellationToken);
+        }
+
+        public async Task<ProviderTrack?> FindByExternalIdAsync(string externalId, CancellationToken cancellationToken)
+        {
+            return await db.ProviderTracks
+                .Include(pt => pt.Track)
+                    .ThenInclude(t => t.Artist)
+                .Include(pt => pt.Track)
+                    .ThenInclude(t => t.ProviderTracks)
+                .FirstOrDefaultAsync(pt => pt.ExternalId == externalId, cancellationToken);
         }
 
         public async Task<IReadOnlyList<ProviderTrack>> FindByExternalIdsAsync(string provider, IEnumerable<string> externalIds, CancellationToken cancellationToken)

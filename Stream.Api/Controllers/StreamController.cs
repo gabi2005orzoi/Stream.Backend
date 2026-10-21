@@ -37,8 +37,12 @@ namespace Stream.Api.Controllers
             if (source != null)
                 return Ok(source);
 
-            // Fallback: If provider failed (e.g. YouTube blocked on Render), find track in DB and fallback to other providers
-            var pt = await providerTrackRepository.FindByProviderAndExternalIdAsync(provider ?? "Youtube", externalId, cancellationToken);
+            // Fallback: If direct provider failed, find track in DB and fallback to other providers
+            var pt = (!string.IsNullOrWhiteSpace(provider) ? await providerTrackRepository.FindByProviderAndExternalIdAsync(provider, externalId, cancellationToken) : null)
+                     ?? await providerTrackRepository.FindByProviderAndExternalIdAsync("Youtube", externalId, cancellationToken)
+                     ?? await providerTrackRepository.FindByProviderAndExternalIdAsync("Invidious", externalId, cancellationToken)
+                     ?? await providerTrackRepository.FindByExternalIdAsync(externalId, cancellationToken);
+
             if (pt?.Track != null)
             {
                 var fallbackSource = await providerManager.GetPlaybackSourceForTrackAsync(pt.Track, cancellationToken);
@@ -83,10 +87,14 @@ namespace Stream.Api.Controllers
             var audio = await providerManager.GetAudioStreamAsync(externalId, provider, cancellationToken);
 
             if (audio != null)
-                return File(audio.Stream, audio.MimeType, enableRangeProcessing: false);
+                return File(audio.Stream, audio.MimeType, enableRangeProcessing: true);
 
             // Fallback: If direct stream failed, try other providers for this track
-            var pt = await providerTrackRepository.FindByProviderAndExternalIdAsync(provider ?? "Youtube", externalId, cancellationToken);
+            var pt = (!string.IsNullOrWhiteSpace(provider) ? await providerTrackRepository.FindByProviderAndExternalIdAsync(provider, externalId, cancellationToken) : null)
+                     ?? await providerTrackRepository.FindByProviderAndExternalIdAsync("Youtube", externalId, cancellationToken)
+                     ?? await providerTrackRepository.FindByProviderAndExternalIdAsync("Invidious", externalId, cancellationToken)
+                     ?? await providerTrackRepository.FindByExternalIdAsync(externalId, cancellationToken);
+
             if (pt?.Track != null)
             {
                 var fallbackAudio = await providerManager.GetAudioStreamForTrackAsync(pt.Track, cancellationToken);

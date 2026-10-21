@@ -35,7 +35,10 @@ namespace Stream.Infrastructure.Providers
 
             try
             {
-                await foreach(var video in youtube.Search.GetVideosAsync(query, cancellationToken))
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(3));
+
+                await foreach (var video in youtube.Search.GetVideosAsync(query, cts.Token))
                 {
                     string artist = video.Author.ChannelTitle;
                     string title = video.Title;
@@ -55,6 +58,9 @@ namespace Stream.Infrastructure.Providers
                         }
                     }
 
+                    var artworkUrl = video.Thumbnails.OrderByDescending(t => t.Resolution.Area).FirstOrDefault()?.Url
+                                     ?? $"https://i.ytimg.com/vi/{video.Id.Value}/hqdefault.jpg";
+
                     results.Add(new TrackCandidate
                     {
                         Provider = Name,
@@ -63,7 +69,7 @@ namespace Stream.Infrastructure.Providers
                         Artist = artist,
                         Album = null,
                         Duration = video.Duration,
-                        ArtworkUrl = video.Thumbnails.OrderByDescending(t => t.Resolution.Area).FirstOrDefault()?.Url,
+                        ArtworkUrl = artworkUrl,
                         ExternalUrl = video.Url
                     });
 
@@ -76,10 +82,10 @@ namespace Stream.Infrastructure.Providers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[YoutubeProvider] YoutubeExplode search error: {ex.Message}. Falling back to Invidious search...");
+                Console.WriteLine($"[YoutubeProvider] YoutubeExplode search failed or timed out: {ex.Message}. Falling back to Invidious search...");
             }
 
-            // Fallback to Invidious search if YouTube search failed on server
+            // Fallback to Invidious search if direct YouTube search timed out or was blocked on server
             try
             {
                 var invResults = await invidiousProvider.SearchAsync(query, cancellationToken);
@@ -105,11 +111,13 @@ namespace Stream.Infrastructure.Providers
         {
             try
             {
-                var streamManifest = await youtube.Videos.Streams.GetManifestAsync(externalId, cancellationToken);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(3));
 
+                var streamManifest = await youtube.Videos.Streams.GetManifestAsync(externalId, cts.Token);
                 var audioStreamInfo = streamManifest.GetAudioStreams().GetWithHighestBitrate();
 
-                if(audioStreamInfo == null)
+                if (audioStreamInfo == null)
                     throw new InvalidOperationException("No audio streams found in YoutubeExplode manifest.");
 
                 return new PlaybackSource
@@ -126,7 +134,7 @@ namespace Stream.Infrastructure.Providers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[YoutubeProvider] Direct YouTube stream failed on server ({ex.Message}). Trying Invidious & Cobalt fallback...");
+                Console.WriteLine($"[YoutubeProvider] Direct YouTube stream failed or timed out ({ex.Message}). Trying Invidious fallback...");
 
                 // 1. Invidious fallback for YouTube video ID
                 try
@@ -143,7 +151,7 @@ namespace Stream.Infrastructure.Providers
                     Console.WriteLine($"[YoutubeProvider] Invidious fallback failed for {externalId}: {invEx.Message}");
                 }
 
-                // 2. Cobalt fallback for YouTube video ID
+                // 2. Cobalt fallback for YouTube video ID (if available)
                 try
                 {
                     var cobaltSource = await cobaltProvider.GetPlaybackSourceAsync(externalId, cancellationToken);
@@ -166,7 +174,10 @@ namespace Stream.Infrastructure.Providers
         {
             try
             {
-                var streamManifest = await youtube.Videos.Streams.GetManifestAsync(externalId, cancellationToken);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(3));
+
+                var streamManifest = await youtube.Videos.Streams.GetManifestAsync(externalId, cts.Token);
                 var audioStreamInfo = streamManifest.GetAudioStreams().GetWithHighestBitrate();
 
                 if (audioStreamInfo == null)
@@ -187,7 +198,7 @@ namespace Stream.Infrastructure.Providers
             }
             catch(Exception ex)
             {
-                Console.WriteLine($"[YoutubeProvider] Direct YouTube audio stream failed ({ex.Message}). Trying Invidious & Cobalt proxy fallback...");
+                Console.WriteLine($"[YoutubeProvider] Direct YouTube audio stream failed or timed out ({ex.Message}). Trying Invidious proxy fallback...");
 
                 // 1. Try Invidious
                 try

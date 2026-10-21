@@ -28,6 +28,22 @@ namespace Stream.Application.Services
             this.trackRepository = trackRepository;
         }
 
+        private static string NormalizeArtwork(string? artworkUrl, string externalId, string provider)
+        {
+            if (string.IsNullOrWhiteSpace(artworkUrl) 
+                || artworkUrl.Contains("invidious", StringComparison.OrdinalIgnoreCase) 
+                || artworkUrl.StartsWith("/vi/", StringComparison.OrdinalIgnoreCase))
+            {
+                if (provider.Equals("Invidious", StringComparison.OrdinalIgnoreCase) 
+                    || provider.Equals("Youtube", StringComparison.OrdinalIgnoreCase) 
+                    || externalId.Length == 11)
+                {
+                    return $"https://i.ytimg.com/vi/{externalId}/hqdefault.jpg";
+                }
+            }
+            return artworkUrl ?? string.Empty;
+        }
+
         public async Task<IReadOnlyList<SearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(query))
@@ -65,6 +81,8 @@ namespace Stream.Application.Services
                 var key = $"{candidate.Provider}_{candidate.ExternalId}";
                 resolvedMap.TryGetValue(key, out var track);
 
+                var artwork = NormalizeArtwork(track?.ArtworkUrl ?? candidate.ArtworkUrl, candidate.ExternalId, candidate.Provider);
+
                 results.Add(new SearchResult
                 {
                     TrackId = track?.Id,
@@ -74,7 +92,7 @@ namespace Stream.Application.Services
                     Artist = track?.Artist?.Name ?? candidate.Artist,
                     Album = candidate.Album,
                     Duration = track?.Duration ?? candidate.Duration,
-                    ArtworkUrl = track?.ArtworkUrl ?? candidate.ArtworkUrl
+                    ArtworkUrl = artwork
                 });
             }
 
@@ -129,6 +147,8 @@ namespace Stream.Application.Services
                     var key = $"{candidate.Provider}_{candidate.ExternalId}";
                     resolvedMap.TryGetValue(key, out var track);
 
+                    var artwork = NormalizeArtwork(track?.ArtworkUrl ?? candidate.ArtworkUrl, candidate.ExternalId, candidate.Provider);
+
                     results.Add(new SearchResult
                     {
                         TrackId = track?.Id,
@@ -138,7 +158,7 @@ namespace Stream.Application.Services
                         Artist = track?.Artist?.Name ?? candidate.Artist,
                         Album = candidate.Album,
                         Duration = track?.Duration ?? candidate.Duration,
-                        ArtworkUrl = track?.ArtworkUrl ?? candidate.ArtworkUrl
+                        ArtworkUrl = artwork
                     });
                 }
 
@@ -151,15 +171,17 @@ namespace Stream.Application.Services
                         if (!existingTrackIds.Contains(dt.Id))
                         {
                             var pt = dt.ProviderTracks.FirstOrDefault();
+                            var extId = pt?.ExternalId ?? string.Empty;
+                            var prov = pt?.Provider ?? "Youtube";
                             results.Add(new SearchResult
                             {
                                 TrackId = dt.Id,
-                                Provider = pt?.Provider ?? "YouTube",
-                                ExternalId = pt?.ExternalId ?? string.Empty,
+                                Provider = prov,
+                                ExternalId = extId,
                                 Title = dt.Title,
                                 Artist = dt.Artist?.Name ?? string.Empty,
                                 Duration = dt.Duration,
-                                ArtworkUrl = dt.ArtworkUrl
+                                ArtworkUrl = NormalizeArtwork(dt.ArtworkUrl, extId, prov)
                             });
                         }
                     }

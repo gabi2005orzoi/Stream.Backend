@@ -160,11 +160,11 @@ namespace Stream.Application.Services
 
         public static bool IsReasonableDuration(TimeSpan? duration)
         {
-            if (!duration.HasValue || duration.Value == TimeSpan.Zero)
-                return true;
+            if (!duration.HasValue || duration.Value <= TimeSpan.FromSeconds(30))
+                return false;
 
-            // Reject tracks shorter than 45 seconds or longer than 7.5 minutes (which are usually full albums or DJ sets)
-            return duration.Value >= TimeSpan.FromSeconds(45) && duration.Value <= TimeSpan.FromMinutes(7.5);
+            // Reject tracks shorter than 30 seconds or longer than 8.5 minutes (which are usually full albums or DJ sets)
+            return duration.Value >= TimeSpan.FromSeconds(30) && duration.Value <= TimeSpan.FromMinutes(8.5);
         }
     }
 }

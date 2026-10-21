@@ -42,13 +42,34 @@ namespace Stream.Application.Services
             return string.IsNullOrWhiteSpace(truncated) ? "Untitled Track" : truncated;
         }
 
+        private static string SafeArtworkUrl(string? artworkUrl, string? externalId, string provider)
+        {
+            if (string.IsNullOrWhiteSpace(artworkUrl)
+                || artworkUrl.Contains("invidious", StringComparison.OrdinalIgnoreCase)
+                || artworkUrl.StartsWith("/vi/", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(externalId) && (provider.Equals("Invidious", StringComparison.OrdinalIgnoreCase) || provider.Equals("Youtube", StringComparison.OrdinalIgnoreCase) || externalId.Length == 11))
+                {
+                    return $"https://i.ytimg.com/vi/{externalId}/hqdefault.jpg";
+                }
+            }
+            return artworkUrl ?? string.Empty;
+        }
+
         public async Task<Track> ResolveAsync(TrackCandidate candidate, CancellationToken cancellationToken)
         {
             var existingProviderTrack = await providerTrackRepository
                 .FindByProviderAndExternalIdAsync(candidate.Provider, candidate.ExternalId, cancellationToken);
 
             if (existingProviderTrack != null)
+            {
+                if (!string.IsNullOrWhiteSpace(existingProviderTrack.Track.ArtworkUrl) &&
+                    (existingProviderTrack.Track.ArtworkUrl.Contains("invidious", StringComparison.OrdinalIgnoreCase) || existingProviderTrack.Track.ArtworkUrl.StartsWith("/vi/")))
+                {
+                    existingProviderTrack.Track.ArtworkUrl = SafeArtworkUrl(existingProviderTrack.Track.ArtworkUrl, existingProviderTrack.ExternalId, existingProviderTrack.Provider);
+                }
                 return existingProviderTrack.Track;
+            }
 
             var safeTitle = SafeTitle(candidate.Title);
             var safeArtist = SafeArtistName(candidate.Artist);
@@ -87,7 +108,7 @@ namespace Stream.Application.Services
                     ArtistId = artist.Id,
                     Artist = artist,
                     Duration = candidate.Duration ?? TimeSpan.Zero,
-                    ArtworkUrl = candidate.ArtworkUrl,
+                    ArtworkUrl = SafeArtworkUrl(candidate.ArtworkUrl, candidate.ExternalId, candidate.Provider),
                 };
 
                 await trackRepository.AddAsync(track, cancellationToken);
@@ -205,7 +226,7 @@ namespace Stream.Application.Services
                             ArtistId = artist.Id,
                             Artist = artist,
                             Duration = candidate.Duration ?? TimeSpan.Zero,
-                            ArtworkUrl = candidate.ArtworkUrl,
+                            ArtworkUrl = SafeArtworkUrl(candidate.ArtworkUrl, candidate.ExternalId, candidate.Provider),
                             ProviderTracks = new List<ProviderTrack>()
                         };
 
@@ -240,6 +261,11 @@ namespace Stream.Application.Services
                 {
                     if (existingMap.TryGetValue(candidate.ExternalId, out var pt))
                     {
+                        if (!string.IsNullOrWhiteSpace(pt.Track.ArtworkUrl) &&
+                            (pt.Track.ArtworkUrl.Contains("invidious", StringComparison.OrdinalIgnoreCase) || pt.Track.ArtworkUrl.StartsWith("/vi/")))
+                        {
+                            pt.Track.ArtworkUrl = SafeArtworkUrl(pt.Track.ArtworkUrl, pt.ExternalId, pt.Provider);
+                        }
                         resultsMap[$"{candidate.Provider}_{candidate.ExternalId}"] = pt.Track;
                     }
                 }

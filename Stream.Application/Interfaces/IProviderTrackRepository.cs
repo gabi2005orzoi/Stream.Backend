@@ -1,4 +1,4 @@
-﻿using Stream.Domain.Models;
+using Stream.Domain.Models;
 
 namespace Stream.Application.Interfaces
 {
@@ -14,6 +14,10 @@ namespace Stream.Application.Interfaces
 
         Task<ProviderTrack?> FindByProviderAndExternalIdAsync(
             string provider,
+            string externalId,
+            CancellationToken cancellationToken);
+
+        Task<ProviderTrack?> FindByExternalIdAsync(
             string externalId,
             CancellationToken cancellationToken);
 

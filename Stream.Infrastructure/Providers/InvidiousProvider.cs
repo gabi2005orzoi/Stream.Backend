@@ -33,13 +33,10 @@ namespace Stream.Infrastructure.Providers
                 instances.Add(configuredInstance.TrimEnd('/'));
             }
 
-            // Reliable default public instances with active API
+            // Reliable default public instance with active API
             var defaults = new[]
             {
-                "https://invidious.f5.si",
-                "https://inv.nadeko.net",
-                "https://invidious.nerdvpn.de",
-                "https://invidious.tiekoetter.com"
+                "https://invidious.f5.si"
             };
 
             foreach (var d in defaults)
@@ -62,7 +59,7 @@ namespace Stream.Infrastructure.Providers
                 {
                     var url = $"{instance}/api/v1/search?q={Uri.EscapeDataString(query.Trim())}&type=video";
                     using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    cts.CancelAfter(TimeSpan.FromSeconds(5));
+                    cts.CancelAfter(TimeSpan.FromSeconds(4));
 
                     var response = await httpClient.GetAsync(url, cts.Token);
                     if (!response.IsSuccessStatusCode)
@@ -82,28 +79,22 @@ namespace Stream.Infrastructure.Providers
                         if (string.IsNullOrWhiteSpace(videoId))
                             continue;
 
+                        // Filter out live broadcasts, upcoming events, and non-music short clips
+                        var isLive = item.TryGetProperty("liveNow", out var lProp) && lProp.GetBoolean();
+                        var isUpcoming = item.TryGetProperty("isUpcoming", out var uProp) && uProp.GetBoolean();
+                        var isPremiere = item.TryGetProperty("isPremiere", out var pProp) && pProp.GetBoolean();
+                        var seconds = item.TryGetProperty("lengthSeconds", out var lenProp) && lenProp.TryGetInt32(out var sec) ? sec : 0;
+
+                        if (isLive || isUpcoming || isPremiere || seconds <= 30)
+                            continue;
+
                         var title = item.TryGetProperty("title", out var tProp) ? tProp.GetString() ?? "Unknown" : "Unknown";
                         var author = item.TryGetProperty("author", out var aProp) ? aProp.GetString() ?? "Unknown Artist" : "Unknown Artist";
 
-                        TimeSpan? duration = null;
-                        if (item.TryGetProperty("lengthSeconds", out var lenProp) && lenProp.TryGetInt32(out var sec))
-                        {
-                            duration = TimeSpan.FromSeconds(sec);
-                        }
+                        TimeSpan? duration = TimeSpan.FromSeconds(seconds);
 
-                        string? artworkUrl = null;
-                        if (item.TryGetProperty("videoThumbnails", out var thumbs) && thumbs.ValueKind == JsonValueKind.Array)
-                        {
-                            var bestThumb = thumbs.EnumerateArray()
-                                .Where(th => th.TryGetProperty("url", out _))
-                                .OrderByDescending(th => th.TryGetProperty("width", out var w) ? w.GetInt32() : 0)
-                                .FirstOrDefault();
-
-                            if (bestThumb.ValueKind == JsonValueKind.Object && bestThumb.TryGetProperty("url", out var uProp))
-                            {
-                                artworkUrl = uProp.GetString();
-                            }
-                        }
+                        // Official Google CDN image - 100% reliable, fast, open CORS, no bot challenge
+                        var artworkUrl = $"https://i.ytimg.com/vi/{videoId}/hqdefault.jpg";
 
                         results.Add(new TrackCandidate
                         {

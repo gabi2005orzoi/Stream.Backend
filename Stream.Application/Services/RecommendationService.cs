@@ -340,19 +340,34 @@ namespace Stream.Application.Services
 
         private static TrackDto MapToDto(Track track)
         {
+            var artwork = track.ArtworkUrl;
+            var pt = track.ProviderTracks?.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(artwork) 
+                || artwork.Contains("invidious", StringComparison.OrdinalIgnoreCase) 
+                || artwork.StartsWith("/vi/", StringComparison.OrdinalIgnoreCase))
+            {
+                var extId = pt?.ExternalId;
+                if (!string.IsNullOrWhiteSpace(extId) && (pt?.Provider == "Youtube" || pt?.Provider == "Invidious" || extId.Length == 11))
+                {
+                    artwork = $"https://i.ytimg.com/vi/{extId}/hqdefault.jpg";
+                }
+            }
+
             return new TrackDto
             {
                 Id = track.Id,
                 Title = track.Title,
                 ArtistName = track.Artist?.Name ?? string.Empty,
                 Duration = track.Duration,
-                ArtworkUrl = track.ArtworkUrl,
-                Providers = track.ProviderTracks.Select(pt => new ProviderTrackDto
-                {
-                    Provider = pt.Provider,
-                    ExternalId = pt.ExternalId,
-                    ExternalUrl = pt.ExternalUrl
-                }).ToList()
+                ArtworkUrl = artwork,
+                Providers = track.ProviderTracks != null
+                    ? track.ProviderTracks.Select(p => new ProviderTrackDto
+                    {
+                        Provider = p.Provider,
+                        ExternalId = p.ExternalId,
+                        ExternalUrl = p.ExternalUrl
+                    }).ToList()
+                    : []
             };
         }
 
